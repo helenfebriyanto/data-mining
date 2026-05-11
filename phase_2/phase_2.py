@@ -69,9 +69,9 @@ def task_hdbscan(input_path, output_path):
         batch_labels, _ = hdbscan.approximate_predict(hdbscan_cpu, X_batch)
         all_labels.extend(batch_labels)
 
-    df['cluster_dbscan'] = all_labels
+    df['cluster_hdbscan'] = all_labels
 
-    outlier_count = (df['cluster_dbscan'] == -1).sum()
+    outlier_count = (df['cluster_hdbscan'] == -1).sum()
     print(f'Outlier count from hDBCSAN (label -1): {outlier_count} dots')
 
     # We save this file in task 2 so the task 3 doesnt need to re read the whole file
@@ -103,7 +103,7 @@ def task_export(final_input_path):
     df_final = pd.read_parquet(final_input_path)
 
     # Outlier dataset
-    df_outliers = df_final[df_final['cluster_dbscan'] == -1].copy()
+    df_outliers = df_final[df_final['cluster_hdbscan'] == -1].copy()
     df_outliers.to_parquet(os.path.join(folder_path, 'paysim-outliers-phase4.parquet'), index=False)
 
     # Profiling cluster
