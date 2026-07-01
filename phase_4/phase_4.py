@@ -246,12 +246,14 @@ def select_top_anomalies(df, top_n=20000):
     return top_df
 
 @task
-def export_results(df, output_path):
+def export_results(df, parquet_path, csv_path):
     logger = get_run_logger()
 
-    df.to_parquet(output_path, index=False)
+    df.to_parquet(parquet_path, index=False)
+    df.to_csv(csv_path, index=False)
 
-    logger.info(f"Exported Result: {output_path}")
+    logger.info(f"Exported Parquet: {parquet_path}")
+    logger.info(f"Exported CSV: {csv_path}")
 
 @flow
 def handling_outlier_pipeline():
@@ -278,13 +280,20 @@ def handling_outlier_pipeline():
     #validation
     df = validate_fraud(df)
 
+    # EXPORT SEMUA HASIL PHASE 4
+    df.to_csv(
+        "../datasets/phase_4/paysim-phase4-complete.csv",
+        index=False
+    )
+
     # select top suspicious transactions
     top_df = select_top_anomalies(df)
 
     # export result
     export_results(
         top_df,
-        "../datasets/phase_4/paysim-suspicious-transactions.parquet"
+        "../datasets/phase_4/paysim-suspicious-transactions.parquet",
+        "../datasets/phase_4/paysim-suspicious-transactions.csv"
     )
 
 if __name__ == "__main__":
