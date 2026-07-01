@@ -1,8 +1,10 @@
+import os
 from prefect import flow, task, get_run_logger
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import RobustScaler
 from scipy.stats import entropy as scipy_entropy
+from joblib import dump
 
 # LOAD DATA
 @task
@@ -92,22 +94,35 @@ def feature_engineering(df):
 @task
 def transform_data(df):
     logger = get_run_logger()
-    
-    # One-hot encoding
-    df = pd.concat([df.drop(columns=["type"]), 
-                    pd.get_dummies(df["type"], prefix="type")], axis=1)
-    
-    # Scaling
+
+    df = pd.concat(
+        [
+            df.drop(columns=["type"]),
+            pd.get_dummies(df["type"], prefix="type")
+        ],
+        axis=1
+    )
+
     scale_cols = [
-        "amount", "oldbalanceOrg", "oldbalanceDest",
-        "balanceDiffOrig", "balanceDiffDest"
+        "amount",
+        "oldbalanceOrg",
+        "oldbalanceDest",
+        "balanceDiffOrig",
+        "balanceDiffDest"
     ]
-    
+
     scaler = RobustScaler()
     df[scale_cols] = scaler.fit_transform(df[scale_cols])
-    
+
+    models_dir = "../models"
+    os.makedirs(models_dir, exist_ok=True)
+
+    scaler_path = os.path.join(models_dir, "robust_scaler.pkl")
+    dump(scaler, scaler_path)
+
+    logger.info(f"Scaler saved to: {scaler_path}")
     logger.info("Encoding + scaling done")
-    
+
     return df
 
 # FEATURE SELECTION
