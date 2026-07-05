@@ -100,7 +100,7 @@ def transform_data(df):
     # Scaling
     scale_cols = [
         "amount", "oldbalanceOrg", "oldbalanceDest",
-        "balanceDiffOrig", "balanceDiffDest"
+        "balanceDiffOrig", "balanceDiffDest", "step"
     ]
     
     scaler = RobustScaler()
