@@ -103,21 +103,29 @@ def build_basket(df):
         basket_parts.append(cluster_items)
 
     # HDBSCAN outlier dari Phase 2
-    # Jangan one-hot semua label HDBSCAN karena bisa terlalu banyak.
-    # Untuk Phase 3, cukup outlier vs normal.
-    if "cluster_hdbscan" in df.columns:
+    # Pakai cluster_birch_hdbscan (hasil BIRCH+HDBSCAN), BUKAN cluster_hdbscan (HDBSCAN
+    # langsung + approximate_predict di Phase 2 bagian 5). Versi langsung menandai ~71%
+    # baris sebagai outlier sehingga item "hdbscan_outlier" nyaris tidak informatif untuk
+    # association rule mining. Nama item di basket tetap "hdbscan_outlier"/"hdbscan_normal"
+    # supaya semua filter di bawah (generate_report_rules, select_top_10_rules, dst) tidak
+    # perlu ikut diubah.
+    if "cluster_birch_hdbscan" in df.columns:
         hdbscan_items = pd.DataFrame(index=df.index)
-        hdbscan_items["hdbscan_outlier"] = df["cluster_hdbscan"] == -1
-        hdbscan_items["hdbscan_normal"] = df["cluster_hdbscan"] != -1
+        hdbscan_items["hdbscan_outlier"] = df["cluster_birch_hdbscan"] == -1
+        hdbscan_items["hdbscan_normal"] = df["cluster_birch_hdbscan"] != -1
         basket_parts.append(hdbscan_items)
 
     # Discretize numeric columns
+    # balanceDiffOrig/balanceDiffDest sudah tidak ada sejak Phase 1 mengganti fitur ini
+    # menjadi origError/destError - ganti referensinya di sini juga, kalau tidak loop di
+    # bawah cuma akan skip kedua kolom itu (silent, tidak error, tapi origError/destError
+    # jadi tidak pernah ikut dianalisis padahal ini fitur pembeda paling kuat di Phase 2).
     numeric_cols = [
         "amount",
         "oldbalanceOrg",
         "oldbalanceDest",
-        "balanceDiffOrig",
-        "balanceDiffDest"
+        "origError",
+        "destError"
     ]
 
     for col in numeric_cols:
@@ -310,23 +318,14 @@ def generate_meaningful_rules(rules):
 def generate_report_rules(meaningful_rules):
     report_rules = meaningful_rules.copy()
 
-    # Buang rule yang consequent-nya terlalu mekanis
-    report_rules = report_rules[
-        ~report_rules["consequents_str"].str.contains(
-            "balanceDiffOrig|balanceDiffDest",
-            regex=True,
-            na=False
-        )
-    ].copy()
-
-    # Buang rule yang antecedent-nya terlalu bergantung ke balanceDiff
-    report_rules = report_rules[
-        ~report_rules["antecedents_str"].str.contains(
-            "balanceDiffOrig|balanceDiffDest",
-            regex=True,
-            na=False
-        )
-    ].copy()
+    # Catatan: dua filter balanceDiffOrig/balanceDiffDest yang dulu ada di sini sengaja
+    # dihapus. Kolom itu sudah diganti origError/destError sejak Phase 1, dan alasan
+    # awal membuang balanceDiffOrig (nilainya nyaris selalu = -amount untuk transaksi
+    # normal, jadi "mekanis"/tautologis dengan amount) tidak berlaku untuk origError/
+    # destError - keduanya nyaris 0 untuk mayoritas transaksi dan cuma membesar pada
+    # kelompok kecil yang justru fraud-rate-nya jauh di atas rata-rata (lihat Phase 2).
+    # Kalau difilter di sini, rule paling informatif dari origError/destError malah
+    # tidak akan pernah muncul di report_rules.
 
     # Buang consequent yang terlalu umum dan tidak menarik
     report_rules = report_rules[
@@ -411,9 +410,11 @@ def generate_fraud_rules(basket):
     ].copy()
 
     # Buang antecedent yang terlalu mekanis kalau mau lebih bersih
+    # (balanceDiffOrig/balanceDiffDest dihapus dari filter ini - lihat catatan di
+    # generate_report_rules; kolomnya sudah diganti origError/destError)
     fraud_rules = fraud_rules[
         ~fraud_rules["antecedents_str"].str.contains(
-            "balanceDiffOrig|balanceDiffDest|isFraud_no",
+            "isFraud_no",
             regex=True,
             na=False
         )

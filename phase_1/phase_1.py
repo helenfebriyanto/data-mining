@@ -1,8 +1,10 @@
+import os
 from prefect import flow, task, get_run_logger
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import RobustScaler
 from scipy.stats import entropy as scipy_entropy
+from joblib import dump
 
 # LOAD DATA
 @task
@@ -21,34 +23,93 @@ def load_data(path):
 @task
 def check_data(df):
     logger = get_run_logger()
-    
+
     missing = df.isnull().sum()
     duplicates = df.duplicated().sum()
     unique = df.nunique()
-    isFraudCount = df['isFraud'].value_counts()
-    fraud_analysis = df.groupby('type')['isFraud'].agg(['sum', 'mean', 'count'])
-    
-    # Origin (berdasarkan nameOrig)
-    orig_err_C = (df[df["nameOrig"].str.startswith("C")]["oldbalanceOrg"].sub(df["amount"]).sub(df["newbalanceOrig"]).abs().gt(0.01).sum())
-    orig_err_M = (df[df["nameOrig"].str.startswith("M")]["oldbalanceOrg"].sub(df["amount"]).sub(df["newbalanceOrig"]).abs().gt(0.01).sum())
+    isFraudCount = df["isFraud"].value_counts()
+    fraud_analysis = df.groupby("type")["isFraud"].agg(["sum", "mean", "count"])
 
+    # Balance consistency errors
+    origin_error = (
+        df["oldbalanceOrg"]
+        - df["amount"]
+        - df["newbalanceOrig"]
+    ).abs()
 
-    # Destination (berdasarkan nameDest)
-    dest_err_C = (df[df["nameDest"].str.startswith("C")]["oldbalanceDest"].add(df["amount"]).sub(df["newbalanceDest"]).abs().gt(0.01).sum())
-    dest_err_M = (df[df["nameDest"].str.startswith("M")]["oldbalanceDest"].add(df["amount"]).sub(df["newbalanceDest"]).abs().gt(0.01).sum())
-    
+    destination_error = (
+        df["oldbalanceDest"]
+        + df["amount"]
+        - df["newbalanceDest"]
+    ).abs()
+
+    origin_error_count = (origin_error > 0.01).sum()
+    destination_error_count = (destination_error > 0.01).sum()
+
+    # Origin by account type
+    orig_err_C = (
+        df[df["nameOrig"].str.startswith("C")]
+        ["oldbalanceOrg"]
+        .sub(df["amount"])
+        .sub(df["newbalanceOrig"])
+        .abs()
+        .gt(0.01)
+        .sum()
+    )
+
+    orig_err_M = (
+        df[df["nameOrig"].str.startswith("M")]
+        ["oldbalanceOrg"]
+        .sub(df["amount"])
+        .sub(df["newbalanceOrig"])
+        .abs()
+        .gt(0.01)
+        .sum()
+    )
+
+    # Destination by account type
+    dest_err_C = (
+        df[df["nameDest"].str.startswith("C")]
+        ["oldbalanceDest"]
+        .add(df["amount"])
+        .sub(df["newbalanceDest"])
+        .abs()
+        .gt(0.01)
+        .sum()
+    )
+
+    dest_err_M = (
+        df[df["nameDest"].str.startswith("M")]
+        ["oldbalanceDest"]
+        .add(df["amount"])
+        .sub(df["newbalanceDest"])
+        .abs()
+        .gt(0.01)
+        .sum()
+    )
+
     nameDest_count = df["nameDest"].str[0].value_counts()
 
-    logger.info(f"Missing values: \n{missing}")
-    logger.info(f"Unique values: \n{unique}")
+    logger.info(f"Missing values:\n{missing}")
+    logger.info(f"Unique values:\n{unique}")
     logger.info(f"Duplicates: {duplicates}")
-    logger.info(f"isFraud Count: \n{isFraudCount}")
-    logger.info(f'Fraud analysis by transaction type: \n{fraud_analysis}')
-    logger.info(f'Origin error (C): {orig_err_C}')
-    logger.info(f'Origin error (M): {orig_err_M}')
-    logger.info(f'Destination error (C): {dest_err_C}')
-    logger.info(f'Destination error (M): {dest_err_M}')
-    logger.info(f'Name Destination Count: \n{nameDest_count}')
+    logger.info(f"isFraud Count:\n{isFraudCount}")
+    logger.info(f"Fraud analysis by transaction type:\n{fraud_analysis}")
+
+    logger.info(f"Origin error transactions: {origin_error_count}")
+    logger.info(f"Destination error transactions: {destination_error_count}")
+
+    logger.info(f"Origin error statistics:\n{origin_error.describe()}")
+    logger.info(f"Destination error statistics:\n{destination_error.describe()}")
+
+    logger.info(f"Origin error (Customer): {orig_err_C}")
+    logger.info(f"Origin error (Merchant): {orig_err_M}")
+
+    logger.info(f"Destination error (Customer): {dest_err_C}")
+    logger.info(f"Destination error (Merchant): {dest_err_M}")
+
+    logger.info(f"Name Destination Count:\n{nameDest_count}")
+
     return df
 
 # CLEANING
@@ -75,39 +136,79 @@ def clean_data(df):
 @task
 def feature_engineering(df):
     logger = get_run_logger()
-    
-    df["balanceDiffOrig"] = df["newbalanceOrig"] - df["oldbalanceOrg"]
-    df["balanceDiffDest"] = df["newbalanceDest"] - df["oldbalanceDest"]
-    
-    df["isDestMerchant"] = (df["nameDest"].str.startswith("M")).astype(int)
+
+    df["origError"] = (
+        df["oldbalanceOrg"]
+        - df["amount"]
+        - df["newbalanceOrig"]
+    ).abs()
+
+    df["destError"] = (
+        df["oldbalanceDest"]
+        + df["amount"]
+        - df["newbalanceDest"]
+    ).abs()
+
+    df["isDestMerchant"] = (
+        df["nameDest"].str.startswith("M")
+    ).astype(np.int8)
+
+    df["origDrainedToZero"] = (
+        (df["oldbalanceOrg"] > 0)
+        & (df["newbalanceOrig"] == 0)
+    ).astype(np.int8)
+
     df = df.drop(columns=["nameDest"], errors="ignore")
-    
-    df["origDrainedToZero"] = ((df["oldbalanceOrg"] > 0) & (df["newbalanceOrig"] == 0)).astype(int)
-    
+
     logger.info("Feature engineering complete")
-    
+
     return df
 
 # TRANSFORM (ENCODING + SCALING)
 @task
 def transform_data(df):
     logger = get_run_logger()
-    
-    # One-hot encoding
-    df = pd.concat([df.drop(columns=["type"]), 
-                    pd.get_dummies(df["type"], prefix="type")], axis=1)
-    
-    # Scaling
+
+    df = pd.concat(
+        [
+            df.drop(columns=["type"]),
+            pd.get_dummies(
+                df["type"],
+                prefix="type",
+                dtype=np.int8
+            )
+        ],
+        axis=1
+    )
+
     scale_cols = [
-        "amount", "oldbalanceOrg", "oldbalanceDest",
-        "balanceDiffOrig", "balanceDiffDest", "step"
+        "amount",
+        "oldbalanceOrg",
+        "oldbalanceDest",
+        "origError",
+        "destError",
     ]
-    
+
     scaler = RobustScaler()
+
     df[scale_cols] = scaler.fit_transform(df[scale_cols])
-    
+
+    # reduce memory usage
+    df[scale_cols] = df[scale_cols].astype(np.float32)
+
+    models_dir = "../models"
+    os.makedirs(models_dir, exist_ok=True)
+
+    scaler_path = os.path.join(
+        models_dir,
+        "robust_scaler.pkl"
+    )
+
+    dump(scaler, scaler_path)
+
+    logger.info(f"Scaler saved to: {scaler_path}")
     logger.info("Encoding + scaling done")
-    
+
     return df
 
 # FEATURE SELECTION
