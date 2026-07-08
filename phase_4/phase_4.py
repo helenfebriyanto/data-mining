@@ -2,8 +2,17 @@ from prefect import flow, task, get_run_logger
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import IsolationForest
+from joblib import load
 
+scaler = load("../models/robust_scaler.pkl")
 
+scale_cols = [
+    "amount",
+    "oldbalanceOrg",
+    "oldbalanceDest",
+    "balanceDiffOrig",
+    "balanceDiffDest"
+]
 # LOAD DATA
 @task
 def load_data(path, path_outlier):
@@ -281,7 +290,13 @@ def handling_outlier_pipeline():
     df = validate_fraud(df)
 
     # EXPORT SEMUA HASIL PHASE 4
-    df.to_csv(
+    dashboard_df = df.copy()
+
+    dashboard_df[scale_cols] = scaler.inverse_transform(
+        dashboard_df[scale_cols]
+    )
+
+    dashboard_df.to_csv(
         "../datasets/phase_4/paysim-phase4-complete.csv",
         index=False
     )
