@@ -1,0 +1,16 @@
+{
+  "project_root": "D:\\Fance\\College\\Cawu 5\\Data Mining\\project\\data-mining",
+  "cache_dir": "D:\\Fance\\College\\Cawu 5\\Data Mining\\project\\data-mining\\phase_5\\cache",
+  "files": [
+    "anomaly_type_summary.parquet",
+    "cluster_kmeans_risk_summary_raw.parquet",
+    "cluster_summary.parquet",
+    "fraud_by_score.parquet",
+    "fraud_validation_metrics.parquet",
+    "investigation_summary.parquet",
+    "method_overlap.parquet",
+    "risk_summary.parquet",
+    "top_rules_business.parquet",
+    "top_suspicious_light.parquet"
+  ]
+}
