@@ -235,7 +235,7 @@ def save_data(df, path):
 @flow(name="Phase 1")
 def preprocessing_pipeline():
     
-    raw_path = "../datasets/phase_1/paysim-dataset.csv"
+    raw_path = "../datasets/paysim-dataset.csv"
     output_path = "../datasets/phase_1/paysim-dataset.parquet"
     
     df = load_data(raw_path)
