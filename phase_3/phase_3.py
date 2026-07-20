@@ -109,10 +109,10 @@ def build_basket(df):
     # association rule mining. Nama item di basket tetap "hdbscan_outlier"/"hdbscan_normal"
     # supaya semua filter di bawah (generate_report_rules, select_top_10_rules, dst) tidak
     # perlu ikut diubah.
-    if "cluster_birch_hdbscan" in df.columns:
+    if "is_birch_hdbscan_outlier" in df.columns:
         hdbscan_items = pd.DataFrame(index=df.index)
-        hdbscan_items["hdbscan_outlier"] = df["cluster_birch_hdbscan"] == -1
-        hdbscan_items["hdbscan_normal"] = df["cluster_birch_hdbscan"] != -1
+        hdbscan_items["hdbscan_outlier"] = df["is_birch_hdbscan_outlier"] == 1
+        hdbscan_items["hdbscan_normal"] = df["is_birch_hdbscan_outlier"] == 0
         basket_parts.append(hdbscan_items)
 
     # Discretize numeric columns
@@ -656,6 +656,16 @@ def association_rules_pipeline():
     meaningful_rules = generate_meaningful_rules(rules)
     report_rules = generate_report_rules(meaningful_rules)
     show_important_item_support(basket)
+
+    payment_rules = report_rules[
+        report_rules["antecedents_str"].str.contains("type_PAYMENT", na=False)
+        | report_rules["consequents_str"].str.contains("type_PAYMENT", na=False)
+    ].sort_values("lift", ascending=False)
+
+    logger = get_run_logger()
+    logger.info(f"Number of rules related to PAYMENT: {len(payment_rules)}")
+    logger.info(f"Rules PAYMENT:\n{payment_rules[['antecedents_str','consequents_str','support','confidence','lift']].head(5)}")
+
     fraud_rules = generate_fraud_rules(basket)
     top_10_final = select_top_10_rules(fraud_rules, report_rules)
     plot_top_rules(top_10_final)
