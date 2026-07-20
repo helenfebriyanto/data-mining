@@ -4,19 +4,15 @@ import os
 from pathlib import Path
 import pandas as pd
 
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, Input, Output
 
 import fallback_data
 
 from business_labels import (
     add_rule_business_columns,
-    add_cluster_business_columns,
-    prepare_explorer_table,
 )
 
 from utils.figures import build_figures
-from components.card import source_badge
-from callbacks import register_callbacks
 
 # layouts
 from layouts.executive import executive_layout
@@ -29,10 +25,6 @@ from layouts.explorer import explorer_layout
 
 BASE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = Path(os.environ.get("DASHBOARD_CACHE_DIR", BASE_DIR / "cache"))
-
-# manifest.json is only written when build_dashboard_cache.py completes a full run,
-# so its presence is a good proxy for "we're using the real local cache" vs. fallback.
-USING_CACHE = (CACHE_DIR / "manifest.json").exists()
 
 
 # =====================================================
@@ -116,14 +108,9 @@ def load_data():
 
     }
 
-    # Business-friendly derived columns, computed fresh every load so they stay
-    # correct even against an older cache build that predates these helpers.
     data["rules"] = add_rule_business_columns(data["rules"])
-    data["cluster_summary"] = add_cluster_business_columns(data["cluster_summary"])
-    data["top_suspicious"] = prepare_explorer_table(data["top_suspicious"])
 
     return data
-
 
 # Load Everything Once
 DATA = load_data()
@@ -140,40 +127,11 @@ app = Dash(
 
 server = app.server
 
-# =====================================================
-# Tabs — every panel is built exactly once, right here at startup.
-# Switching tabs afterwards never re-runs Python or hits the server: a tiny
-# clientside callback (callbacks.py) flips a data-tab attribute and CSS
-# (assets/style.css) shows/hides the matching panel. See README.md for why.
-# =====================================================
-
-TABS = [
-    ("executive", "Executive Summary", executive_layout),
-    ("segmentation", "Customer Segments", segmentation_layout),
-    ("patterns", "Hidden Patterns", patterns_layout),
-    ("unusual", "Unusual Activities", unusual_layout),
-    ("recommendation", "Recommendations", recommendation_layout),
-    ("explorer", "Data Explorer", explorer_layout),
-]
-
-DEFAULT_TAB = "executive"
-
-panels = [
-    html.Div(
-        id=f"panel-{tab_id}",
-        **{"data-panel": tab_id},
-        children=[layout_fn(DATA, FIGURES)],
-    )
-    for tab_id, _label, layout_fn in TABS
-]
-
 # Layout
 
 app.layout = html.Div(
 
-    id="app-body",
     className="app-shell",
-    **{"data-tab": DEFAULT_TAB},
 
     children=[
 
@@ -184,16 +142,16 @@ app.layout = html.Div(
             children=[
 
                 html.Div(
-                    children=[
-                        html.Div("Phase 5 · Knowledge Discovery Dashboard", className="eyebrow"),
-                        html.H1("PaySim Banking Discovery Dashboard"),
-                        html.P(
-                            "Business insights from customer segmentation, transaction patterns and anomaly detection."
-                        ),
-                    ]
+                    "Phase 5 - Knowledge Discovery Dashboard",
                 ),
 
-                source_badge(USING_CACHE),
+                html.H1(
+                    "PaySim Banking Discovery Dashboard"
+                ),
+
+                html.P(
+                    "Business insights from customer segmentation, transaction patterns and anomaly detection."
+                ),
 
             ]
 
@@ -202,20 +160,80 @@ app.layout = html.Div(
         dcc.Tabs(
 
             id="tabs",
-            value=DEFAULT_TAB,
-            className="tabs",
+            value="executive",
 
-            children=[dcc.Tab(label=label, value=tab_id) for tab_id, label, _fn in TABS],
+            children=[
+
+                dcc.Tab(
+                    label="Executive Summary",
+                    value="executive"
+                ),
+
+                dcc.Tab(
+                    label="Customer Segments",
+                    value="segmentation"
+                ),
+
+                dcc.Tab(
+                    label="Hidden Patterns",
+                    value="patterns"
+                ),
+
+                dcc.Tab(
+                    label="Unusual Activities",
+                    value="unusual"
+                ),
+
+                dcc.Tab(
+                    label="Recommendations",
+                    value="recommendation"
+                ),
+
+                dcc.Tab(
+                    label="Data Explorer",
+                    value="explorer"
+                ),
+
+            ]
 
         ),
 
-        html.Div(id="tab-panels", children=panels),
+        html.Div(id="tab-content")
 
     ]
 
 )
 
-register_callbacks(app, DATA)
+
+# =====================================================
+# Tab Routing
+# =====================================================
+
+@app.callback(
+
+    Output("tab-content", "children"),
+
+    Input("tabs", "value")
+
+)
+def render_tab(tab):
+
+    if tab == "segmentation":
+        return segmentation_layout(DATA, FIGURES)
+
+    elif tab == "patterns":
+        return patterns_layout(DATA, FIGURES)
+
+    elif tab == "unusual":
+        return unusual_layout(DATA, FIGURES)
+
+    elif tab == "recommendation":
+        return recommendation_layout(DATA, FIGURES)
+
+    elif tab == "explorer":
+        return explorer_layout(DATA, FIGURES)
+
+    return executive_layout(DATA, FIGURES)
 
 
 # =====================================================
@@ -226,6 +244,6 @@ if __name__ == "__main__":
 
     app.run(
         debug=False,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8050
     )
