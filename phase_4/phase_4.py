@@ -27,13 +27,13 @@ def load_data(path, path_outlier):
     logger.info(f"Data Outliers Shape: {df_outliers.shape}")
     logger.info(f"Columns: {list(df.columns)}")
 
-    if "cluster_birch_hdbscan" in df.columns:
-        expected_outlier_count = int((df["cluster_birch_hdbscan"] == -1).sum())
+    if "is_birch_hdbscan_outlier" in df.columns:
+        expected_outlier_count = int((df["is_birch_hdbscan_outlier"] == 1).sum())
         logger.info(
             "Sanity Check BIRCH+HDBSCAN Outlier Export\n"
-            f"Rows cluster_birch_hdbscan == -1 : {expected_outlier_count}\n"
-            f"Rows in outlier parquet          : {len(df_outliers)}\n"
-            f"Status                           : {'KONSISTEN' if expected_outlier_count == len(df_outliers) else 'TIDAK KONSISTEN'}"
+            f"Rows is_birch_hdbscan_outlier == 1 : {expected_outlier_count}\n"
+            f"Rows in outlier parquet            : {len(df_outliers)}\n"
+            f"Status                             : {'KONSISTEN' if expected_outlier_count == len(df_outliers) else 'TIDAK KONSISTEN'}"
         )
 
     return df, df_outliers
@@ -223,7 +223,7 @@ def cross_reference(df, df_outliers, iqr_flag, z_flag, iso_flag, balance_flag):
     # Pakai cluster_birch_hdbscan (hasil BIRCH+HDBSCAN dari Phase 2), BUKAN cluster_hdbscan.
     # cluster_hdbscan langsung menandai mayoritas baris sebagai outlier sehingga kurang layak
     # dijadikan sinyal risiko utama.
-    df["flag_HDBSCAN"] = (df["cluster_birch_hdbscan"] == -1).astype(int)
+    df["flag_HDBSCAN"] = df["is_birch_hdbscan_outlier"]
 
     flag_cols = ["flag_IQR", "flag_ZScore", "flag_IsoForest", "flag_HDBSCAN"]
     df["risk_indicator_count"] = df[flag_cols].sum(axis=1).astype(int)
@@ -237,7 +237,9 @@ def cross_reference(df, df_outliers, iqr_flag, z_flag, iso_flag, balance_flag):
         df["flag_HDBSCAN"] * SIGNAL_WEIGHTS["flag_HDBSCAN"]
     ).astype(int)
 
-    df["high_risk"] = (df["risk_score"] >= HIGH_RISK_THRESHOLD).astype(int)
+    df["high_risk"] = (
+        (df["risk_score"] >= HIGH_RISK_THRESHOLD) | (df["flag_HDBSCAN"] == 1)
+    ).astype(int)
     df["critical_risk"] = (df["risk_score"] >= CRITICAL_RISK_THRESHOLD).astype(int)
 
     df["risk_level"] = pd.Categorical(

@@ -187,13 +187,19 @@ def transform_data(df):
         "oldbalanceDest",
         "origError",
         "destError",
+        "step"
     ]
 
-    scaler = RobustScaler()
+    # 1. Aplikasikan Log1p terlebih dahulu untuk meredam skewness ekstrem
+    # (Semua nilai di dalam scale_cols sudah pasti positif atau 0, jadi np.log1p aman digunakan)
+    for col in scale_cols:
+        df[col] = np.log1p(df[col])
 
+    # 2. Aplikasikan RobustScaler pada data yang sudah ditransformasi logaritmik
+    scaler = RobustScaler()
     df[scale_cols] = scaler.fit_transform(df[scale_cols])
 
-    # reduce memory usage
+    # Mengurangi penggunaan memori
     df[scale_cols] = df[scale_cols].astype(np.float32)
 
     models_dir = "../models"
@@ -207,7 +213,7 @@ def transform_data(df):
     dump(scaler, scaler_path)
 
     logger.info(f"Scaler saved to: {scaler_path}")
-    logger.info("Encoding + scaling done")
+    logger.info("Log1p Transformation + Robust Scaling done")
 
     return df
 
