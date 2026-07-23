@@ -1,0 +1,48 @@
+networks:
+  fance-net:
+    driver: bridge
+
+volumes:
+  fance-es-data:
+    driver: local
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: fance-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      # Sesuaikan heap kalau RAM laptop terbatas (default 1GB cukup utk 6,3 juta
+      # dokumen sederhana). Naikkan ke 2g kalau proses indexing terasa lambat.
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "9200:9200"
+    volumes:
+      - fance-es-data:/usr/share/elasticsearch/data
+    networks:
+      - fance-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # Opsional: UI visual utk menjelajah index Elasticsearch (bukan dashboard
+  # utama, cuma alat bantu debugging/verifikasi data selama pengembangan).
+  dejavu:
+    image: appbaseio/dejavu:3.6.0
+    container_name: fance-dejavu
+    ports:
+      - "1358:1358"
+    depends_on:
+      - elasticsearch
+    networks:
+      - fance-net
+    profiles:
+      - tools

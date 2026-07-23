@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.env
+data/*.duckdb
+data/manifest.json
+data/raw_synthetic/
+data/_work/
+venv/
+.DS_Store
