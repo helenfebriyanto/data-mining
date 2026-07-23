@@ -1,0 +1,8 @@
+# Dependensi TAMBAHAN, hanya dipakai oleh tools/generate_synthetic_data.py dan
+# tools/build_rules_and_db.py (skrip pengembangan/uji, BUKAN bagian dashboard
+# produksi). Tidak perlu di-install kalau kamu hanya menjalankan pipeline
+# dengan --mode real memakai data asli kelompok.
+
+mlxtend>=0.23
+scikit-learn>=1.4
+scipy>=1.13
