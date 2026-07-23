@@ -1,6 +1,6 @@
 {
-  "project_root": "C:\\Users\\helen\\Documents\\Project CAWU 5\\data-mining",
-  "cache_dir": "C:\\Users\\helen\\Documents\\Project CAWU 5\\data-mining\\phase_5\\cache",
+  "project_root": "D:\\Fance\\College\\Cawu 5\\Data Mining\\project\\data-mining",
+  "cache_dir": "D:\\Fance\\College\\Cawu 5\\Data Mining\\project\\data-mining\\phase_5\\cache",
   "files": [
     "anomaly_type_summary.parquet",
     "cluster_kmeans_risk_summary_raw.parquet",
